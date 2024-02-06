@@ -180,16 +180,16 @@ class TwoClustersMIP(BaseModel):
 
 
         self.seed = 123
-        self.instantiate()
+        self.model = self.instantiate()
 
     def instantiate(self):
         """Instantiation of the MIP Variables - To be completed."""
         # To be completed
-        weights_1 = np.full(self.J, 1/self.J)
-        weights_2 = np.full(self.J, 1/self.J)
-        self.weights = [weights_1, weights_2]
+        #weights_1 = np.full(self.J, 1/self.J)
+        #weights_2 = np.full(self.J, 1/self.J)
+        #self.weights = [weights_1, weights_2]
         self.m = Model('UTA model')
-        return 
+        
 
     def fit(self, X, Y):
         """Estimation of the parameters - To be completed.
@@ -223,7 +223,9 @@ class TwoClustersMIP(BaseModel):
         M=4
 
         #à définir clairement : 
-        self.breakpoints= [(1/(self.L))*i for i in range(self.L+1)]
+
+
+        
 
 
         criteria = [[[(self.m.addVar(name=f"u_{j}{l}{k}")) for k in range(self.K)] for l in range(self.L+1)]for j in range(self.J) ]
@@ -259,6 +261,15 @@ class TwoClustersMIP(BaseModel):
             #correspond au commentaire de la question 2
             return math.floor(self.L * (x - mins[j]) / (maxs[j] - mins[j]))
 
+
+        breakpoint = [[0] * (self.L + 1) for _ in range(self.J)]
+        for j in range(self.J):
+            for l in range(self.L+1):
+                breakpoint[j][l] = [mins[j] + l * (maxs[j] - mins[j]) / self.L ]
+        
+
+        #for j in range(self.J):
+        #    breakpoint[j][l] = [mins[j] + l * (maxs[j] - mins[j]) / self.L  for l in range(self.L +1) ]
         #cette fonction précédente permettra a priori de trouver le l de la fonction suivante
 
         #l correspond au tronçon sur lequel est la valeur 
@@ -376,6 +387,7 @@ class TwoClustersMIP(BaseModel):
         #m.Params.Presolve = 0
         # Résolution du PL
         self.criteria = criteria
+        self.breakpoints = breakpoint
         self.m.optimize()
         return
 
@@ -387,19 +399,18 @@ class TwoClustersMIP(BaseModel):
         X: np.ndarray
             (n_samples, n_features) list of features of elements
         """
-        
-
         utilities = np.zeros((len(X), self.K))  # Tableau 2D: lignes pour les échantillons, colonnes pour les clusters
-        for p in range(len(X)):
+        for i in range(len(X)):
             for k in range(self.K):
                 utility = 0
-                for i, feature in enumerate(X[p]):
-                    for b in range(self.L):
-                        if self.breakpoints[b] <= feature < self.breakpoints[b + 1]:
+                for j, feature in enumerate(X[i]):
+                    for l in range(self.L):
+                        if self.breakpoints [j][l] <= feature < self.breakpoints[j][l + 1]:
                             # Calculer l'utilité pour chaque cluster séparément
-                            utility += self.criteria[k, i, b].X + ((self.criteria[k, i, b+1].X - self.criteria[k, i, b].X) / (self.breakpoints[b+1] - self.breakpoints[b])) * (feature - self.breakpoints[b])
+                            
+                            utility += self.criteria[j][l][k].X + ((self.criteria[j][l+1][k].X - self.criteria[j][l][k].X) / (self.breakpoints[j][l+1] - self.breakpoints[j][l])) * (feature - self.breakpoints[j][l])
                             break
-                utilities[p, k] = utility  # Stocker l'utilité de l'échantillon 'p' pour le cluster 'k'
+            utilities[i, k] = utility  # Stocker l'utilité de l'échantillon 'p' pour le cluster 'k'
         return utilities
         # Do not forget that this method is called in predict_preference (line 42) and therefor should return well-organized data for it to work.
 
