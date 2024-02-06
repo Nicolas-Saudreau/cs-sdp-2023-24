@@ -1,9 +1,9 @@
 import pickle
 from abc import abstractmethod
 
+import numpy as np
 from gurobipy import *
 import math
-import numpy as np
 
 
 class BaseModel(object):
@@ -174,17 +174,22 @@ class TwoClustersMIP(BaseModel):
         """
         self.L = n_pieces
         self.K = n_clusters
+        self.J = 4
+        self.m = Model('UTA model')
+
+
+
         self.seed = 123
-        self.model = self.instantiate(n_pieces, n_clusters)
+        self.instantiate()
 
-    def instantiate(self, n_pieces, n_clusters):
+    def instantiate(self):
         """Instantiation of the MIP Variables - To be completed."""
-        # To be
-        self.L =n_pieces
-        self.K = n_clusters
-        model = Model("Gurobi_1")
-        return model
-
+        # To be completed
+        weights_1 = np.full(self.J, 1/self.J)
+        weights_2 = np.full(self.J, 1/self.J)
+        self.weights = [weights_1, weights_2]
+        self.m = Model('UTA model')
+        return 
 
     def fit(self, X, Y):
         """Estimation of the parameters - To be completed.
@@ -196,23 +201,19 @@ class TwoClustersMIP(BaseModel):
         Y: np.ndarray
             (n_samples, n_features) features of unchosen elements
         """
-        #optimize
-        m = self.instantiate(5, 2)
-        L = self.L
-        K = self.K
-        self.N_COMPARAISON = X.shape[0]
-        self.N_CRITERIA = X.shape[1]
-        # Instanciation du modèle
+
+        # To be completed
+
+        
+
         PRECISION = 0.001
-        N_COMPARAISON = self.N_COMPARAISON
-        N_CRITERIA = self.N_CRITERIA
         #Nombre de features
-        #N_CRITERIA = len(X[0])
+        #N_CRITERIA = len(X_re[0]) devient J
 
         #Nombre de segment/breakpoints dans toutes les fonctions de score, possible de l'adapter pour chaque feature 
         #L = 5
         #Nombre d'occurence dans le dataset/produits traités 
-        #N_COMPARAISON = len(X)
+        N_COMPARAISON = len(X)
 
 
         #Nombre de clusters 
@@ -222,23 +223,24 @@ class TwoClustersMIP(BaseModel):
         M=4
 
         #à définir clairement : 
+        self.breakpoints= [(1/(self.L))*i for i in range(self.L+1)]
 
 
-        criteria = [[[(m.addVar(name=f"u_{j}{l}{k}")) for k in range(K)] for l in range(L+1)]for j in range(N_CRITERIA) ]
+        criteria = [[[(self.m.addVar(name=f"u_{j}{l}{k}")) for k in range(self.K)] for l in range(self.L+1)]for j in range(self.J) ]
 
-        sigma_Xplus = [[(m.addVar(name=f"sigma+{i}{k}")) for k in range(K) ] for i in range(N_COMPARAISON)]
-        sigma_Xminus = [[(m.addVar(name=f"sigma-{i}{k}")) for k in range(K)] for i in range(N_COMPARAISON)]
-        sigma_Yplus = [[(m.addVar(name=f"sigma+{i}{k}")) for k in range(K)] for i in range(N_COMPARAISON)]
-        sigma_Yminus = [[(m.addVar(name=f"sigma-{i}{k}")) for k in range(K)] for i in range(N_COMPARAISON)]
+        sigma_Xplus = [[(self.m.addVar(name=f"sigma+{i}{k}")) for k in range(self.K) ] for i in range(N_COMPARAISON)]
+        sigma_Xminus = [[(self.m.addVar(name=f"sigma-{i}{k}")) for k in range(self.K)] for i in range(N_COMPARAISON)]
+        sigma_Yplus = [[(self.m.addVar(name=f"sigma+{i}{k}")) for k in range(self.K)] for i in range(N_COMPARAISON)]
+        sigma_Yminus = [[(self.m.addVar(name=f"sigma-{i}{k}")) for k in range(self.K)] for i in range(N_COMPARAISON)]
 
-        
-        z_binary = [[m.addVar(name=f"z_{i}_{k}") for k in range(K) ] for i in range(N_COMPARAISON)]
+
+        z_binary = [[self.m.addVar(name=f"z_{i}_{k}") for k in range(self.K) ] for i in range(N_COMPARAISON)]
 
         #hyperparamètre pour le modèle
         epsilon = PRECISION
         # maj du modèle
-        m.update()
-       
+        self.m.update()
+
 
         min_int_X = X.min(axis=0)
         min_int_Y = Y.min(axis=0)
@@ -255,7 +257,7 @@ class TwoClustersMIP(BaseModel):
             #X[i] correspond à une occurence d'un produit traité 
             #j correspond à l'indice de feature 
             #correspond au commentaire de la question 2
-            return math.floor(L * (x - mins[j]) / (maxs[j] - mins[j]))
+            return math.floor(self.L * (x - mins[j]) / (maxs[j] - mins[j]))
 
         #cette fonction précédente permettra a priori de trouver le l de la fonction suivante
 
@@ -263,7 +265,7 @@ class TwoClustersMIP(BaseModel):
         #retourne l'abscisse de gauche ? du tronçon l 
         #appelé xik dans question 3
         def x_seg(j, seg):
-            return mins[j] + seg * (maxs[j] - mins[j]) / L
+            return mins[j] + seg * (maxs[j] - mins[j]) / self.L
 
         #calcule la valeur si(xij)
         #cad le score partiel pour un feature donné 
@@ -275,15 +277,15 @@ class TwoClustersMIP(BaseModel):
             #segm pour le numéro de tronçon
             
             segm = segment(i, j, X)
-            
+            #print(r"segm",segm)
             x_segm = x_seg(j, segm)
-            
+            #print(r"x_segm", x_segm)
             x_segm_1 = x_seg(j, segm +1)
-            
+            #print(r"x_segm_1", x_segm_1)
 
 
             if x == maxs[j]:
-                return get_val(criteria[j][L][k]) 
+                return get_val(criteria[j][self.L][k]) 
             
             S=0
             S = get_val(criteria[j][segm][k])
@@ -297,69 +299,64 @@ class TwoClustersMIP(BaseModel):
         #définissons la somme des fonctions de score pour un produit (de rang i)
         def s(i, X, k, eval : bool = False):
             if not eval : 
-                return quicksum(u(i,j,k,X,False) for j in range(N_CRITERIA))
+                return quicksum(u(i,j,k,X,False) for j in range(self.J))
             else : 
-                return sum(u(i,j,k,X,False) for j in range(N_CRITERIA))
+                return sum(u(i,j,k,X,False) for j in range(self.J))
 
 
-
-        # Ajout des contraintes
 
 
 
         # contraintes de préférence des universités
-        for k in range(K): 
+        for k in range(self.K): 
 
             for i in range(N_COMPARAISON) :
-                               
 
-                m.addConstr((s(i, X, k, False) - sigma_Xplus[i][k] + sigma_Xminus[i][k]) - (s(i, Y, k, False) - sigma_Yplus[i][k] + sigma_Yminus[i][k] + epsilon)<= (M*z_binary[i][k]+ epsilon))
-                m.addConstr(M*(1-z_binary[i][k])<= (s(i, X, k, False) - sigma_Xplus[i][k] + sigma_Xminus[i][k]) - (s(i, Y, k, False) - sigma_Yplus[i][k] + sigma_Yminus[i][k] + epsilon))
-
+                self.m.addConstr((s(i, X, k, False) - sigma_Xplus[i][k] + sigma_Xminus[i][k]) - (s(i, Y, k, False) - sigma_Yplus[i][k] + sigma_Yminus[i][k] + epsilon)<= (M*z_binary[i][k]+ epsilon))
+                self.m.addConstr(M*(1-z_binary[i][k])<= (s(i, X, k, False) - sigma_Xplus[i][k] + sigma_Xminus[i][k]) - (s(i, Y, k, False) - sigma_Yplus[i][k] + sigma_Yminus[i][k] + epsilon))
 
         # Constraint for sigma_Xminus
-        for k in range(K):
+        for k in range(self.K):
             for i in range(N_COMPARAISON):
-                m.addConstr(sigma_Xminus[i][k] >= 0)
+                self.m.addConstr(sigma_Xminus[i][k] >= 0)
 
         # Constraint for sigma_Xplus
-        for k in range(K):
+        for k in range(self.K):
             for i in range(N_COMPARAISON):
-                m.addConstr(sigma_Xplus[i][k] >= 0)
+                self.m.addConstr(sigma_Xplus[i][k] >= 0)
 
         # Constraint for sigma_Yminus
-        for k in range(K):
+        for k in range(self.K):
             for i in range(N_COMPARAISON):
-                m.addConstr(sigma_Yminus[i][k] >= 0)
+                self.m.addConstr(sigma_Yminus[i][k] >= 0)
 
         # Constraint for sigma_Yplus
-        for k in range(K):
+        for k in range(self.K):
             for i in range(N_COMPARAISON):
-                m.addConstr(sigma_Yplus[i][k] >= 0)
+                self.m.addConstr(sigma_Yplus[i][k] >= 0)
 
 
         # contrainte 3
-        for k in range(K) :
-            for j in range(N_CRITERIA):
-                for l in range(L):
-                    m.addConstr(criteria[j][l+1][k] - criteria[j][l][k] >= epsilon)
+        for k in range(self.K) :
+            for j in range(self.J):
+                for l in range(self.L):
+                    self.m.addConstr(criteria[j][l+1][k] - criteria[j][l][k] >= epsilon)
 
 
         # contrainte 4
-        for k in range(K):
-                m.addConstr(quicksum(criteria[j][L][k] for j in range(N_CRITERIA)) ==1)
+        for k in range(self.K):
+                self.m.addConstr(quicksum(criteria[j][self.L][k] for j in range(self.J)) ==1)
             
-        #m.addConstr(s(i, X, k, False) == 1)
 
         # contrainte 5
-        for k in range(K):
-            for j in range(N_CRITERIA):
+        for k in range(self.K):
+            for j in range(self.J):
                 #ajustement arbitraire avec 2222 car u() traite toujours des matrices
                 mins_ada = np.vstack([np.array([ 2, 2, 2, 2]), mins])
                 
                 print(mins_ada)
                 #mins correspond aux plus petites valeurs possibles pour chaque critère
-                m.addConstr(u(1, j,k, mins_ada, False) == 0)
+                self.m.addConstr(u(1, j,k, mins_ada, False) == 0)
 
 
 
@@ -370,14 +367,16 @@ class TwoClustersMIP(BaseModel):
         sigma_Yplus_flat = [var for sublist in sigma_Yplus for var in sublist]
 
         # Objective function
-        m.setObjective(sum(sigma_Xplus_flat) + sum(sigma_Xminus_flat) + sum(sigma_Yminus_flat) + sum(sigma_Yplus_flat), GRB.MINIMIZE)
-      
+        self.m.setObjective(sum(sigma_Xplus_flat) + sum(sigma_Xminus_flat) + sum(sigma_Yminus_flat) + sum(sigma_Yplus_flat), GRB.MINIMIZE)
+
+
+        # Fonction Objectif
+        #m.setObjective(sum(sigma_Xplus) + sum(sigma_Xminus) + sum(sigma_Yminus) + sum(sigma_Yplus), GRB.MINIMIZE)         
         # Paramétrage (mode mute)
         #m.Params.Presolve = 0
         # Résolution du PL
-        m.optimize()
-
-        # To be completed
+        self.criteria = criteria
+        self.m.optimize()
         return
 
     def predict_utility(self, X):
@@ -388,60 +387,23 @@ class TwoClustersMIP(BaseModel):
         X: np.ndarray
             (n_samples, n_features) list of features of elements
         """
-        # To be completed
+        
+
+        utilities = np.zeros((len(X), self.K))  # Tableau 2D: lignes pour les échantillons, colonnes pour les clusters
+        for p in range(len(X)):
+            for k in range(self.K):
+                utility = 0
+                for i, feature in enumerate(X[p]):
+                    for b in range(self.L):
+                        if self.breakpoints[b] <= feature < self.breakpoints[b + 1]:
+                            # Calculer l'utilité pour chaque cluster séparément
+                            utility += self.criteria[k, i, b].X + ((self.criteria[k, i, b+1].X - self.criteria[k, i, b].X) / (self.breakpoints[b+1] - self.breakpoints[b])) * (feature - self.breakpoints[b])
+                            break
+                utilities[p, k] = utility  # Stocker l'utilité de l'échantillon 'p' pour le cluster 'k'
+        return utilities
         # Do not forget that this method is called in predict_preference (line 42) and therefor should return well-organized data for it to work.
-        def segment(i, j, X):
-            x = X[i][j]
-            #floor permet de faire l'arrondi 
-            #donne un chiffre entre 0 et L (ici 5) qui donne l'appartenance à l'un des 6 segment possible 
-            #X[i] correspond à une occurence d'un produit traité 
-            #j correspond à l'indice de feature 
-            #correspond au commentaire de la question 2
-            return math.floor(L * (x - mins[j]) / (maxs[j] - mins[j]))
-
-        #cette fonction précédente permettra a priori de trouver le l de la fonction suivante
-
-        #l correspond au tronçon sur lequel est la valeur 
-        #retourne l'abscisse de gauche ? du tronçon l 
-        #appelé xik dans question 3
-        def x_seg(j, seg):
-            return mins[j] + seg * (maxs[j] - mins[j]) / L
-
-        #calcule la valeur si(xij)
-        #cad le score partiel pour un feature donné 
-        # ?? on obtient le score à partir d'une forme ressemblant au développement limité autour de la valeur de la feature sur le tronçon
-
-        def u(i,j,k,X,eval : bool = False):
-            get_val = (lambda v: v.X) if eval else (lambda v: v)
-            x = X[i][j]
-            #segm pour le numéro de tronçon
-            
-            segm = segment(i, j, X)
-            
-            x_segm = x_seg(j, segm)
-            
-            x_segm_1 = x_seg(j, segm +1)
-            
 
 
-            if x == maxs[j]:
-                return get_val(criteria[j][L][k]) 
-            
-            S=0
-            S = get_val(criteria[j][segm][k])
-            slope = (x - x_segm)/(x_segm_1 - x_segm)
-            width = get_val(criteria[j][segm+1][k]) - get_val(criteria[j][segm][k])
-            S =+ slope*width
-
-            return S
-            
-            
-            def s(i, X, k, eval : bool = False):
-                if not eval : 
-                    return quicksum(u(i,j,k,X,False) for j in range(N_CRITERIA))
-                else : 
-                    return sum(u(i,j,k,X,False) for j in range(N_CRITERIA))
-        return 
 
 class HeuristicModel(BaseModel):
     """Skeleton of MIP you have to write as the first exercise.
