@@ -206,7 +206,7 @@ class TwoClustersMIP(BaseModel):
 
         
 
-        PRECISION = 0.001
+        PRECISION = 0.01
         #Nombre de features
         #N_CRITERIA = len(X_re[0]) devient J
 
@@ -220,7 +220,7 @@ class TwoClustersMIP(BaseModel):
         #K=2
 
         #Majorant contrainte 
-        M=4
+        M=10
 
         #à définir clairement : 
 
@@ -236,7 +236,7 @@ class TwoClustersMIP(BaseModel):
         sigma_Yminus = [[(self.m.addVar(name=f"sigma-{i}{k}")) for k in range(self.K)] for i in range(N_COMPARAISON)]
 
 
-        z_binary = [[self.m.addVar(name=f"z_{i}_{k}") for k in range(self.K) ] for i in range(N_COMPARAISON)]
+        z_binary = [[self.m.addVar(name=f"z_{i}_{k}", vtype = GRB.BINARY) for k in range(self.K) ] for i in range(N_COMPARAISON)]
 
         #hyperparamètre pour le modèle
         epsilon = PRECISION
@@ -263,10 +263,11 @@ class TwoClustersMIP(BaseModel):
 
 
         breakpoint = [[0] * (self.L + 1) for _ in range(self.J)]
-        for j in range(self.J):
-            for l in range(self.L+1):
-                breakpoint[j][l] = [mins[j] + l * (maxs[j] - mins[j]) / self.L ]
         
+        for l in range(self.L+1):
+            for j in range(self.J):
+                breakpoint[j][l] = [mins[j] + l * (maxs[j] - mins[j]) / self.L ]
+                print(breakpoint[j][l])
 
         #for j in range(self.J):
         #    breakpoint[j][l] = [mins[j] + l * (maxs[j] - mins[j]) / self.L  for l in range(self.L +1) ]
@@ -318,7 +319,11 @@ class TwoClustersMIP(BaseModel):
 
 
 
-        # contraintes de préférence des universités
+        #for i in range(N_COMPARAISON):
+        #    self.m.addConstr(sum(z_binary[i][k] for k in range(self.K)) >= 1 - epsilon)
+        #    self.m.addConstr(sum(z_binary[i][k] for k in range(self.K)) <= 1 + epsilon)
+
+
         for k in range(self.K): 
 
             for i in range(N_COMPARAISON) :
@@ -365,12 +370,10 @@ class TwoClustersMIP(BaseModel):
                 #ajustement arbitraire avec 2222 car u() traite toujours des matrices
                 mins_ada = np.vstack([np.array([ 2, 2, 2, 2]), mins])
                 
-                print(mins_ada)
                 #mins correspond aux plus petites valeurs possibles pour chaque critère
                 self.m.addConstr(u(1, j,k, mins_ada, False) == 0)
 
-
-
+       
         # Flatten the lists of lists into a single list
         sigma_Xplus_flat = [var for sublist in sigma_Xplus for var in sublist]
         sigma_Xminus_flat = [var for sublist in sigma_Xminus for var in sublist]
@@ -407,10 +410,9 @@ class TwoClustersMIP(BaseModel):
                     for l in range(self.L):
                         if self.breakpoints [j][l] <= feature < self.breakpoints[j][l + 1]:
                             # Calculer l'utilité pour chaque cluster séparément
-                            
-                            utility += self.criteria[j][l][k].X + ((self.criteria[j][l+1][k].X - self.criteria[j][l][k].X) / (self.breakpoints[j][l+1] - self.breakpoints[j][l])) * (feature - self.breakpoints[j][l])
+                            utility += self.criteria[j][l][k].X + ((self.criteria[j][l+1][k].X - self.criteria[j][l][k].X) / (self.breakpoints[j][l+1][0] - self.breakpoints[j][l][0])) * (feature - self.breakpoints[j][l][0])
                             break
-            utilities[i, k] = utility  # Stocker l'utilité de l'échantillon 'p' pour le cluster 'k'
+                utilities[i][k] = utility 
         return utilities
         # Do not forget that this method is called in predict_preference (line 42) and therefor should return well-organized data for it to work.
 
